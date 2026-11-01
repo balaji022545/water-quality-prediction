@@ -1,0 +1,21 @@
+{
+    "Random Forest": {
+        "n_estimators": 150,
+        "min_samples_split": 2,
+        "min_samples_leaf": 1,
+        "max_features": "sqrt",
+        "max_depth": 15
+    },
+    "XGBoost": {
+        "subsample": 0.8,
+        "n_estimators": 200,
+        "max_depth": 5,
+        "learning_rate": 0.05,
+        "colsample_bytree": 0.8
+    },
+    "Logistic Regression": {
+        "solver": "liblinear",
+        "class_weight": null,
+        "C": 10.0
+    }
+}

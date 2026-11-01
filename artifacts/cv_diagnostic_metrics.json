@@ -1,0 +1,28 @@
+{
+    "evaluation_type": "Training Data Out-Of-Fold Cross-Validation Diagnostics (5-Fold)",
+    "training_samples": 2620,
+    "oof_accuracy": 0.6683206106870229,
+    "oof_roc_auc": 0.6849155867535006,
+    "class_0_not_potable": {
+        "support": 1598,
+        "recall": 0.9061326658322904,
+        "precision": 0.6682048915551454,
+        "f1_score": 0.7691899070385126
+    },
+    "class_1_potable": {
+        "support": 1022,
+        "recall": 0.2964774951076321,
+        "precision": 0.6688741721854304,
+        "f1_score": 0.41084745762711866
+    },
+    "oof_confusion_matrix": [
+        [
+            1448,
+            150
+        ],
+        [
+            719,
+            303
+        ]
+    ]
+}
