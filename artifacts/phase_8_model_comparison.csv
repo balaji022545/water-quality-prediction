@@ -1,0 +1,5 @@
+Model,Default_Threshold,Accuracy_at_0.50,Balanced_Accuracy_at_0.50,Recall_C1_at_0.50,Precision_C1_at_0.50,F1_C1_at_0.50,Recall_C0_at_0.50,Precision_C0_at_0.50,ROC_AUC,PR_AUC,Optimal_Threshold,Accuracy_at_Optimal,Balanced_Accuracy_at_Optimal,Recall_C1_at_Optimal,Precision_C1_at_Optimal,F1_C1_at_Optimal,Recall_C0_at_Optimal
+Extra Trees,0.5,0.6748,0.6001,0.2603,0.7348,0.3844,0.9399,0.6652,0.6985,0.611,0.4,0.6573,0.646,0.5949,0.5568,0.5752,0.6971
+HistGradientBoosting,0.5,0.6595,0.6022,0.3415,0.6144,0.439,0.863,0.672,0.6821,0.5883,0.4,0.65,0.6353,0.5685,0.5497,0.5589,0.7021
+XGBoost,0.5,0.6626,0.6028,0.3307,0.6283,0.4333,0.8748,0.6715,0.673,0.5889,0.45,0.6683,0.6263,0.4354,0.6038,0.506,0.8173
+Random Forest (Production Baseline),0.5,0.6683,0.6013,0.2965,0.6689,0.4108,0.9061,0.6682,0.6849,0.5987,0.4,0.6458,0.6336,0.5783,0.5432,0.5602,0.689

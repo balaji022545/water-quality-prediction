@@ -382,5 +382,50 @@ An empirical investigation was conducted across 6 class imbalance handling techn
 4. **Model Preservation**: The production champion model (`models/best_model.joblib`) and active threshold configuration (`artifacts/threshold_config.json`, $\tau = 0.40$) remain active and protected. The winning experimental model is archived separately under [models/experiments/best_imbalance_model.joblib](models/experiments/best_imbalance_model.joblib).
 5. **Comprehensive Technical Report**: For detailed methodology and diagnostic plots, see [artifacts/phase_7_report.md](artifacts/phase_7_report.md).
 
+---
+
+## 🚀 13. Phase 8: Advanced Model Optimization Summary
+
+An advanced model optimization study was performed to investigate whether alternative high-capacity algorithms (Extra Trees, HistGradientBoosting, XGBoost) could outperform the production champion (Tuned Random Forest).
+
+### A. Experimental Setup & Strict Data Isolation
+- **Dataset Partition**: Evaluated strictly on the training partition ($N=2,620$, 1,598 Class 0, 1,022 Class 1). Holdout test partitions (`X_test.csv`, `y_test.csv`, $N=656$) were untouched.
+- **Validation**: 5-Fold Stratified Cross-Validation (`random_state=42`).
+- **Data Leakage Prevention**: `SimpleImputer(strategy='median')` and `StandardScaler` were fitted strictly inside each training fold pipeline.
+- **Production Guardrails**: `models/best_model.joblib`, `artifacts/threshold_config.json`, and `app.py` were maintained untouched.
+
+### B. Hyperparameter Optimization Results (`artifacts/phase_8_best_parameters.json`)
+
+| Model Architecture | Best Cross-Validated Hyperparameters | Best CV ROC-AUC |
+| :--- | :--- | :---: |
+| **Extra Trees (Challenger)** | `n_estimators=100`, `min_samples_split=5`, `min_samples_leaf=2`, `max_features='log2'`, `max_depth=None` | **0.6985** |
+| **HistGradientBoosting** | `min_samples_leaf=30`, `max_iter=100`, `max_depth=None`, `learning_rate=0.03`, `l2_regularization=0.1` | **0.6825** |
+| **XGBoost** | `subsample=0.8`, `reg_alpha=0.0`, `n_estimators=200`, `max_depth=7`, `learning_rate=0.03`, `colsample_bytree=0.7` | **0.6730** |
+| **Random Forest (Baseline)** | `n_estimators=150`, `max_depth=15`, `min_samples_split=2`, `min_samples_leaf=1`, `max_features='sqrt'` | **0.6849** |
+
+### C. Out-of-Fold 5-Fold Cross-Validation Performance Comparison
+
+| Model | Operating Threshold | Accuracy | Balanced Accuracy | Recall (C1) | Precision (C1) | F1-Score (C1) | Recall (C0) | Precision (C0) | ROC-AUC | PR-AUC |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Extra Trees (Tuned)** | 0.50 (Default) | **0.6748** | 0.6001 | 0.2603 | **0.7348** | 0.3844 | **0.9399** | 0.6652 | **0.6985** | **0.6110** |
+| **Extra Trees (Tuned)** | **0.40 (Optimal)** | **0.6573** | **0.6460** | **0.5949** | **0.5568** | **0.5752** | 0.6971 | **0.7289** | **0.6985** | **0.6110** |
+| HistGradientBoosting | 0.50 (Default) | 0.6595 | 0.6022 | 0.3415 | 0.6144 | 0.4390 | 0.8630 | 0.6720 | 0.6821 | 0.5883 |
+| HistGradientBoosting | 0.40 (Optimal) | 0.6500 | 0.6353 | 0.5685 | 0.5497 | 0.5589 | 0.7021 | 0.7186 | 0.6821 | 0.5883 |
+| XGBoost | 0.50 (Default) | 0.6626 | 0.6028 | 0.3307 | 0.6283 | 0.4333 | 0.8748 | 0.6715 | 0.6730 | 0.5889 |
+| XGBoost | 0.45 (Optimal) | 0.6683 | 0.6263 | 0.4354 | 0.6038 | 0.5060 | 0.8173 | 0.6953 | 0.6730 | 0.5889 |
+| **Random Forest (Baseline)** | 0.50 (Default) | 0.6683 | 0.6013 | 0.2965 | 0.6689 | 0.4108 | 0.9061 | 0.6682 | 0.6849 | 0.5987 |
+| **Random Forest (Baseline)** | **0.40 (Production)** | 0.6458 | 0.6336 | 0.5783 | 0.5432 | 0.5602 | 0.6890 | 0.7208 | 0.6849 | 0.5987 |
+
+### D. Key Strategic Takeaways & Production Recommendation
+1. **Best Cross-Validation Model**: **Extra Trees Classifier** achieved the strongest performance across discrimination metrics (**0.6985 ROC-AUC**, **0.6110 PR-AUC**).
+2. **Improvement Over Production Champion**: At $\tau = 0.40$, Extra Trees improved on Random Forest across all operational metrics:
+   - **Balanced Accuracy**: 64.60% (+1.24 percentage points)
+   - **Class 1 Recall (Potable Detection)**: 59.49% (+1.66 percentage points)
+   - **Class 1 F1-Score**: 0.5752 (+0.0150 improvement)
+   - **Overall Accuracy**: 65.73% (+1.15 percentage points)
+3. **Challenger Status & Deployment Staging**: While Extra Trees is an empirically stronger challenger, the production pipeline (`models/best_model.joblib`) and active config (`artifacts/threshold_config.json`, $\tau = 0.40$) remain in production to uphold standard MLOps change management. The experimental model is archived in [models/experiments/extra_trees_tuned.joblib](models/experiments/extra_trees_tuned.joblib) ready for staging/canary validation.
+4. **Comprehensive Technical Report**: For detailed trade-off analysis, confusion matrices, and ROC/PR curves, refer to [artifacts/phase_8_report.md](artifacts/phase_8_report.md).
+
+
 
 
