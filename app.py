@@ -1,23 +1,26 @@
 """
 Streamlit Web Application: Water Quality Prediction System.
 
-Phase 6: Interactive Web Application
-Author: Senior Python Developer & ML Engineer
 Project: Water Quality Prediction Using Machine Learning
 Champion Model: Tuned Random Forest Pipeline (models/best_model.joblib)
+Decision Threshold: Tuned Optimal Cutoff (artifacts/threshold_config.json)
 
 Important Operational Rules:
 - Preserves the project folder structure.
 - Uses models/best_model.joblib champion pipeline without retraining or altering.
-- Does NOT load or evaluate the holdout test dataset (data/processed/X_test.csv).
+- Decouples classification threshold from the rigid 0.50 default cutoff.
+- Loads optimal threshold dynamically from artifacts/threshold_config.json.
+- Gracefully handles missing/invalid threshold configuration with explicit user alerts.
+- Does NOT load or evaluate the holdout test dataset.
 - Takes all 9 chemical features in their exact training order.
 - Supports optional missing values gracefully via the pipeline's embedded SimpleImputer.
-- Displays dataset-based class predictions and probability scores.
+- Displays dataset-based class predictions, probabilities, and the active threshold.
 - Prominently displays the responsible-use safety disclaimer and limitations.
 """
 
+import json
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Any
 
 import joblib
 import numpy as np
@@ -28,6 +31,8 @@ import streamlit as st
 # Constant Definitions & Metadata
 # -----------------------------------------------------------------------------
 MODEL_PATH = Path("models") / "best_model.joblib"
+THRESHOLD_CONFIG_PATH = Path("artifacts") / "threshold_config.json"
+DEFAULT_FALLBACK_THRESHOLD = 0.50
 
 # Exact 9 feature names in strict order matching model training schema
 FEATURE_NAMES = [
@@ -129,7 +134,7 @@ FEATURE_METADATA = {
 
 
 # -----------------------------------------------------------------------------
-# Model Loader with Streamlit Resource Caching
+# Model & Threshold Configuration Loaders
 # -----------------------------------------------------------------------------
 @st.cache_resource(show_spinner="Loading machine learning model...")
 def load_champion_pipeline(model_path: Path):
@@ -161,14 +166,74 @@ def load_champion_pipeline(model_path: Path):
     return pipeline
 
 
+@st.cache_data(show_spinner=False)
+def load_threshold_configuration(
+    config_path: Path = THRESHOLD_CONFIG_PATH
+) -> Tuple[float, Dict[str, Any], Optional[str]]:
+    """
+    Load the selected classification threshold from JSON metadata.
+    Handles missing or invalid configuration safely with explicit warnings.
+
+    Returns
+    -------
+    threshold : float
+        Decision cutoff for Class 1 (Potable).
+    config : dict
+        Metadata dictionary.
+    status_msg : str or None
+        Warning message if fallback had to be used.
+    """
+    if not config_path.is_file():
+        return (
+            DEFAULT_FALLBACK_THRESHOLD,
+            {"selected_threshold": DEFAULT_FALLBACK_THRESHOLD},
+            f"Threshold configuration file '{config_path.name}' was not found. "
+            f"Safely using default threshold {DEFAULT_FALLBACK_THRESHOLD:.2f}."
+        )
+
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        raw_thresh = data.get("selected_threshold")
+        if raw_thresh is None:
+            return (
+                DEFAULT_FALLBACK_THRESHOLD,
+                data,
+                f"Key 'selected_threshold' missing in {config_path.name}. "
+                f"Using default threshold {DEFAULT_FALLBACK_THRESHOLD:.2f}."
+            )
+
+        threshold = float(raw_thresh)
+        if not (0.0 < threshold < 1.0):
+            return (
+                DEFAULT_FALLBACK_THRESHOLD,
+                data,
+                f"Configured threshold {threshold} is outside valid range (0.0, 1.0). "
+                f"Using default threshold {DEFAULT_FALLBACK_THRESHOLD:.2f}."
+            )
+
+        return threshold, data, None
+
+    except Exception as err:
+        return (
+            DEFAULT_FALLBACK_THRESHOLD,
+            {"selected_threshold": DEFAULT_FALLBACK_THRESHOLD},
+            f"Failed to read threshold configuration ({err}). "
+            f"Using default threshold {DEFAULT_FALLBACK_THRESHOLD:.2f}."
+        )
+
+
 # -----------------------------------------------------------------------------
-# Core Prediction Logic
+# Core Prediction Logic with Threshold Tuning
 # -----------------------------------------------------------------------------
 def predict_sample(
-    pipeline, input_dict: Dict[str, Optional[float]]
+    pipeline,
+    input_dict: Dict[str, Optional[float]],
+    threshold: float = 0.40
 ) -> Tuple[int, np.ndarray, pd.DataFrame]:
     """
-    Format user input into a DataFrame and execute prediction.
+    Format user input into a DataFrame and execute threshold-adjusted prediction.
 
     Parameters
     ----------
@@ -176,6 +241,8 @@ def predict_sample(
         Fitted champion pipeline.
     input_dict : dict
         Dictionary of feature names and numeric/None values.
+    threshold : float
+        Decision cutoff for Class 1 (Potable).
 
     Returns
     -------
@@ -186,10 +253,13 @@ def predict_sample(
     # Construct DataFrame with strictly defined feature names and column order
     input_df = pd.DataFrame([input_dict], columns=FEATURE_NAMES)
 
-    # Execute pipeline inference
+    # Execute pipeline probability inference
     # Missing values (np.nan / None) are automatically imputed by the pipeline's SimpleImputer
-    predicted_class = int(pipeline.predict(input_df)[0])
     probabilities = pipeline.predict_proba(input_df)[0]
+    prob_class_1 = float(probabilities[1])
+
+    # Apply classification threshold
+    predicted_class = 1 if prob_class_1 >= threshold else 0
 
     return predicted_class, probabilities, input_df
 
@@ -237,35 +307,52 @@ def main():
             font-size: 0.92rem;
             margin-top: 15px;
         }
+        .threshold-pill {
+            background-color: #e8f4fd;
+            border: 1px solid #b8daff;
+            color: #004085;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            display: inline-block;
+        }
         </style>
         """,
         unsafe_allow_html=True,
     )
+
+    # Load threshold configuration
+    active_threshold, threshold_meta, threshold_warning = load_threshold_configuration(THRESHOLD_CONFIG_PATH)
 
     # -------------------------------------------------------------------------
     # Header Section
     # -------------------------------------------------------------------------
     st.markdown('<div class="main-header">💧 Water Quality Prediction System</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="sub-header">Interactive Machine Learning Screening Interface for Water Potability Assessment</div>',
+        '<div class="sub-header">Interactive Machine Learning Screening Interface with Classification Threshold Tuning</div>',
         unsafe_allow_html=True,
     )
 
     st.markdown(
-        """
-        This web application employs an end-to-end Machine Learning pipeline
-        (champion **Tuned Random Forest**) trained on the Kaggle Water Potability dataset.
+        f"""
+        This web application employs an end-to-end Machine Learning pipeline (champion **Tuned Random Forest**)
+        with **Classification Threshold Tuning** (<span class="threshold-pill">Active Threshold: τ = {active_threshold:.2f}</span>).
         Enter the chemical and physical measurements of a water sample below to generate an automated potability screening.
         
-        *Missing values are fully supported*: If a measurement is unknown or unmeasured, simply check the
-        **"Unmeasured (NaN)"** box for that feature. The model's embedded imputer will substitute the training median value.
-        """
+        *Missing values are fully supported*: If a measurement is unmeasured, check the **"Unmeasured (NaN)"** box.
+        The pipeline's embedded `SimpleImputer` will substitute the training median value.
+        """,
+        unsafe_allow_html=True
     )
+
+    if threshold_warning:
+        st.warning(f"⚠️ {threshold_warning}")
 
     st.divider()
 
     # -------------------------------------------------------------------------
-    # Sidebar: Model Architecture & Quick Info
+    # Sidebar: Model Architecture & Threshold Diagnostics
     # -------------------------------------------------------------------------
     with st.sidebar:
         st.header("ℹ️ Model Architecture")
@@ -281,14 +368,21 @@ def main():
             1. `SimpleImputer(strategy='median')`
             2. `StandardScaler()`
             3. `RandomForestClassifier()`
+            """
+        )
+
+        st.divider()
+        st.subheader("🎯 Classification Threshold")
+        st.markdown(
+            f"""
+            - **Active Cutoff (τ):** `{active_threshold:.2f}`
+            - **Default Cutoff:** `0.50`
             
-            **Holdout Test Benchmark:**
-            - **Overall Accuracy:** `66.92%`
-            - **ROC-AUC Score:** `0.6603`
-            - **Class 0 Recall (Screening Power):** `92.50%`
-            - **Class 1 Recall:** `26.95%`
-            
-            *The model prioritizes public health caution: it has a 92.5% capture rate for unsafe water, making it a conservative screening filter.*
+            **Why Threshold Tuning?**
+            At the standard 0.50 cutoff, the model identified only **29.65%** of potable water (Class 1).
+            Tuning the decision threshold to **{active_threshold:.2f}** (selected via 5-Fold Stratified CV OOF)
+            improves Class 1 recall to **57.83%** (almost doubling positive capture) while maintaining a solid **68.90%**
+            screening sensitivity for non-potable water.
             """
         )
 
@@ -482,8 +576,10 @@ def main():
             # 1. Load pipeline securely
             pipeline = load_champion_pipeline(MODEL_PATH)
 
-            # 2. Execute inference
-            pred_class, probas, input_df = predict_sample(pipeline, input_data)
+            # 2. Execute threshold-tuned inference
+            pred_class, probas, input_df = predict_sample(
+                pipeline, input_data, threshold=active_threshold
+            )
             prob_class_0 = float(probas[0])
             prob_class_1 = float(probas[1])
 
@@ -496,15 +592,15 @@ def main():
             with res_col1:
                 if pred_class == 1:
                     st.success(
-                        "### 🚰 Model Result: Potable (Class 1)\n"
-                        "The machine learning model classifies this water sample as **Potable** "
-                        "based on the statistical patterns learned from the Kaggle Water Potability training dataset."
+                        f"### 🚰 Model Result: Potable (Class 1)\n"
+                        f"The water sample is classified as **Potable** because its estimated probability "
+                        f"({prob_class_1 * 100:.1f}%) meets or exceeds the tuned decision threshold of **τ = {active_threshold:.2f}**."
                     )
                 else:
                     st.error(
-                        "### 🚫 Model Result: Not Potable (Class 0)\n"
-                        "The machine learning model classifies this water sample as **Not Potable** "
-                        "based on the statistical patterns learned from the Kaggle Water Potability training dataset."
+                        f"### 🚫 Model Result: Not Potable (Class 0)\n"
+                        f"The water sample is classified as **Not Potable** because its estimated potability probability "
+                        f"({prob_class_1 * 100:.1f}%) is below the tuned decision threshold of **τ = {active_threshold:.2f}**."
                     )
 
                 # Explanation of what prediction means
@@ -512,14 +608,16 @@ def main():
                     f"""
                     **Prediction Summary:**
                     - **Predicted Dataset Class:** `Class {pred_class}` ({'Potable' if pred_class == 1 else 'Not Potable'})
+                    - **Decision Threshold Applied:** `τ = {active_threshold:.2f}` (vs. standard default `0.50`)
                     - **Confidence Distribution:** {prob_class_0*100:.1f}% Not Potable vs. {prob_class_1*100:.1f}% Potable
+                    - **Decision Rule:** `Potable (1)` if $P(\\text{{Potable}}) \\ge {active_threshold:.2f}$, else `Not Potable (0)`
                     - **Imputed Features:** {', '.join(missing_features) if missing_features else 'None (all 9 measured)'}
                     """
                 )
 
             with res_col2:
-                st.markdown("#### Probability Distribution")
-                m_col1, m_col2 = st.columns(2)
+                st.markdown("#### Probability & Threshold Breakdown")
+                m_col1, m_col2, m_col3 = st.columns(3)
                 with m_col1:
                     st.metric(
                         label="Class 0 (Not Potable)",
@@ -530,11 +628,19 @@ def main():
                         label="Class 1 (Potable)",
                         value=f"{prob_class_1 * 100:.1f}%",
                     )
+                with m_col3:
+                    st.metric(
+                        label="Active Threshold (τ)",
+                        value=f"{active_threshold:.2f}",
+                    )
 
                 # Progress bar visualization for potability probability
-                st.markdown("**Estimated Potability Score:**")
+                st.markdown(f"**Potability Probability vs. Cutoff (τ = {active_threshold:.2f}):**")
                 st.progress(prob_class_1)
-                st.caption(f"Score: {prob_class_1:.3f} / 1.000 (Decision Threshold = 0.500)")
+                st.caption(
+                    f"Score: {prob_class_1:.3f} / 1.000 — "
+                    f"{'Passed threshold (Potable)' if prob_class_1 >= active_threshold else 'Below threshold (Not Potable)'}"
+                )
 
             # Submitted Feature Data Inspection Expander
             with st.expander("🔍 View Submitted Feature Table (Input to Pipeline)", expanded=False):
@@ -568,9 +674,9 @@ def main():
         3. <strong>Unmeasured Pathogens:</strong> This dataset measures only 9 physical/chemical variables. Critical
            <strong>microbiological pathogens (such as <em>Escherichia coli</em>, Salmonella, Vibrio cholerae, Giardia, and enteroviruses)</strong>
            are entirely unmeasured in this dataset. A water sample can be chemically balanced yet fatally contaminated with bacteria or viruses.<br>
-        4. <strong>Conservative Model Behavior:</strong> Operating at a standard 0.50 cutoff, the model is intentionally
-           conservative (92.5% Class 0 recall, 27.0% Class 1 recall on holdout testing) to minimize the dangerous risk
-           of false-safe classifications.
+        4. <strong>Threshold Tuning Trade-off:</strong> Lowering the decision threshold to 0.40 captures approximately twice
+           as many potable water samples (boosting Class 1 recall from 29.6% to 57.8%), but increases the false positive rate
+           (Class 0 recall adjusts from 90.6% to 68.9%). All results must be verified by laboratory assays.
         </div>
         """,
         unsafe_allow_html=True,

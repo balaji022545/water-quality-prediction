@@ -167,7 +167,8 @@ project_1/
 │   ├── model_training.py               # (Phase 4) Fold-isolated training, SMOTE & tuning
 │   ├── model_evaluation.py             # (Phase 5) Evaluation report & OOF diagnostics
 │   ├── model_explainability.py         # (Phase 5) SHAP TreeExplainer & local interpretations
-│   └── utils.py
+│   ├── threshold_tuning.py             # Classification threshold evaluation & selection
+│   └── utils.py                        # Helper functions for threshold loading & validation
 │
 ├── models/
 │   ├── best_model.joblib               # Self-contained champion pipeline (RF Tuned)
@@ -176,9 +177,14 @@ project_1/
 │   ├── preprocessor.joblib             # ColumnTransformer (Imputer + Scaler)
 │   └── imputer.joblib                  # Standalone SimpleImputer
 │
-├── artifacts/                          # Visual diagnostic plots, reports & SHAP charts
+├── artifacts/
+│   ├── threshold_comparison.csv        # Metrics across 11 candidate thresholds (0.20 - 0.70)
+│   ├── threshold_metrics.png           # Performance curve vs threshold
+│   ├── threshold_confusion_matrix.png  # Confusion matrix at optimal threshold (0.40)
+│   ├── threshold_config.json           # Synchronized active threshold metadata
+│   └── ...                             # Prior diagnostic plots & reports
 │
-├── app.py                              # (Phase 6) Streamlit Web Application
+├── app.py                              # (Phase 6) Streamlit Web Application (Threshold-Tuned)
 ├── requirements.txt                    # Project dependencies
 └── README.md                           # Documentation & execution guide
 ```
@@ -226,19 +232,112 @@ The application accepts 9 physicochemical parameters:
 - **Dynamic Median Imputation**: Unmeasured features are passed as `np.nan` directly to `models/best_model.joblib`. The pipeline's embedded `SimpleImputer` replaces them using the median values computed from the training dataset.
 
 ### E. How to Interpret Model Predictions
+- **Classification Decision Rule**:
+  $$\hat{y} = \begin{cases} 1 \ (\text{Potable}), & \text{if } P(\text{Potable} \mid X) \ge \tau^* \\ 0 \ (\text{Not Potable}), & \text{otherwise} \end{cases}$$
+  where $\tau^* = 0.40$ is the tuned decision cutoff loaded dynamically from [artifacts/threshold_config.json](file:///c:/Users/balaj/OneDrive/Desktop/project_1/artifacts/threshold_config.json).
 - **Class 0 (Not Potable / Unsafe)**:
-  - The model's estimated probability for potable water is $< 0.50$.
-  - Indicates that the chemical profile matches patterns commonly observed in non-potable samples within the Kaggle training dataset.
+  - Model estimated probability for potable water is $< 0.40$.
+  - Indicates that the chemical profile exhibits characteristics typical of non-potable samples in the training dataset.
 - **Class 1 (Potable / Safe)**:
-  - The model's estimated probability for potable water is $\ge 0.50$.
-  - Indicates that the chemical profile matches patterns observed in potable samples within the Kaggle training dataset.
+  - Model estimated probability for potable water is $\ge 0.40$.
+  - Indicates that the chemical profile satisfies dataset-based potability patterns under the tuned decision boundary.
 - **Estimated Class Probabilities**:
-  - The application displays the estimated probability distribution (e.g., `Class 0: 72.1%`, `Class 1: 27.9%`).
-  - **Note**: The estimated probability is a statistical measure of model confidence based on dataset patterns, **NOT** the physical probability that the water is safe to drink.
+  - The application displays the estimated probability distribution (e.g., `Class 0: 67.5%`, `Class 1: 32.5%`).
+  - **Important**: The model probability is a statistical measure of model confidence based on dataset patterns, **NOT** the physical probability that the water is safe to drink.
 
-### F. Critical Responsible-Use Limitations & Public Health Warning
-1. **Auxiliary Screening Only**: This application is strictly an educational and decision-support screening tool; it **does NOT constitute official laboratory drinking-water certification**.
-2. **Mandatory Laboratory Testing**: Accurate water potability clearance requires certified laboratory chemical spectrometry and bacteriological culture testing in compliance with WHO or EPA guidelines.
-3. **Unmeasured Biological Pathogens**: The model evaluates only 9 inorganic/organic parameters. Fatal biological pathogens (e.g., *Escherichia coli*, *Vibrio cholerae*, *Salmonella*, *Giardia lamblia*, and enteroviruses) are **completely unmeasured** in this dataset. Chemically balanced water may still harbor lethal biological contaminants.
-4. **Conservative Screening Bias**: The champion model exhibits high Class 0 recall (92.5%) and lower Class 1 recall (27.0%) at the standard 0.50 threshold, intentionally prioritizing caution over false reassurance.
+---
+
+## ⚖️ 10. Classification Threshold Tuning & Decision Optimization
+
+### A. What is a Classification Threshold?
+In probabilistic binary classification, machine learning algorithms output continuous posterior class probabilities:
+$$P(Y = 1 \mid X) \in [0, 1]$$
+To assign a discrete categorical label, a **decision threshold ($\tau$)** is applied:
+$$\hat{Y} = \mathbb{I}(P(Y=1 \mid X) \ge \tau)$$
+By default, standard Scikit-learn classifiers apply an arbitrary cutoff of $\tau = 0.50$. However, in real-world scenarios with moderate class imbalance, asymmetric risk, or non-uniform probability distributions, the default 0.50 threshold is rarely optimal.
+
+### B. Why Threshold Tuning was Introduced
+In the original model benchmarks, the champion Random Forest model achieved strong performance on the majority class but suffered from poor sensitivity on the minority class:
+- **Class 0 Recall**: **90.61%** (CV OOF) / **92.50%** (Test)
+- **Class 1 Recall**: **29.65%** (CV OOF) / **26.95%** (Test)
+
+Because the dataset contains fewer potable instances (39%) and Random Forest tree ensembles average hundreds of trees (which naturally compresses extreme probabilities toward the prior mean of ~0.389), the model required an excessively high standard of evidence to output $P \ge 0.50$. As a result, **over 70% of safe drinking water samples were misclassified as unsafe**.
+
+Threshold tuning decouples probability estimation from the categorical decision rule, allowing us to find a decision cutoff that provides a much better balance between safe and unsafe classifications without retraining the model.
+
+### C. Zero-Leakage Validation Strategy
+To prevent data leakage, the optimal threshold was chosen **exclusively using training data**:
+1. **Partition Used**: `data/processed/X_train.csv` ($N=2,620$) and `data/processed/y_train.csv`.
+2. **Cross-Validation**: Stratified 5-Fold Cross-Validation (`StratifiedKFold(n_splits=5, shuffle=True, random_state=42)`).
+3. **Fold Isolation**: Within each fold, `SimpleImputer` and `StandardScaler` were fitted only on the 4 training folds, and predictions were evaluated on the held-out 5th validation fold.
+4. **Out-of-Fold Probabilities**: Every sample's predicted probability was produced by an ensemble that never saw that sample during fitting.
+5. **Holdout Test Isolation**: The unseen test partition (`X_test.csv`, `y_test.csv`) was **strictly preserved** and not used to evaluate or tune candidate thresholds.
+
+### D. Threshold Grid Evaluation (11 Candidate Thresholds)
+Across the 11 candidate thresholds evaluated on the out-of-fold training predictions ($N=2,620$):
+
+| Threshold ($\tau$) | Accuracy | Balanced Accuracy | Class 1 Precision | Class 1 Recall | Class 1 F1 | Class 0 Precision | Class 0 Recall | Class 0 F1 |
+|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| 0.20 | 0.4252 | 0.5253 | 0.4027 | **0.9804** | 0.5709 | 0.8485 | 0.0701 | 0.1295 |
+| 0.25 | 0.4634 | 0.5488 | 0.4165 | 0.9374 | 0.5768 | 0.8000 | 0.1602 | 0.2669 |
+| 0.30 | 0.5275 | 0.5887 | 0.4457 | 0.8669 | 0.5887 | 0.7848 | 0.3104 | 0.4448 |
+| 0.35 | 0.5935 | 0.6177 | 0.4860 | 0.7280 | 0.5828 | 0.7447 | 0.5075 | 0.6036 |
+| **0.40 (Optimal)** | **0.6458** | **0.6336** | **0.5432** | **0.5783** | **0.5602** | **0.7187** | **0.6890** | **0.7035** |
+| 0.45 | 0.6683 | 0.6237 | 0.6082 | 0.4207 | 0.4974 | 0.6905 | 0.8267 | 0.7525 |
+| **0.50 (Default)** | **0.6683** | **0.6013** | **0.6689** | **0.2965** | **0.4108** | **0.6682** | **0.9061** | **0.7692** |
+| 0.55 | 0.6607 | 0.5786 | 0.7317 | 0.2055 | 0.3209 | 0.6520 | 0.9518 | 0.7738 |
+| 0.60 | 0.6508 | 0.5590 | 0.7923 | 0.1419 | 0.2407 | 0.6401 | 0.9762 | 0.7732 |
+| 0.65 | 0.6351 | 0.5360 | 0.8056 | 0.0851 | 0.1540 | 0.6278 | 0.9869 | 0.7674 |
+| 0.70 | 0.6290 | 0.5266 | 0.8378 | 0.0607 | 0.1131 | 0.6229 | 0.9925 | 0.7654 |
+
+### E. Selected Threshold & Rational Trade-Off Analysis
+**Selected Optimal Threshold**: **`τ = 0.40`**
+
+**Selection Justification**:
+1. **Global Maximum in Balanced Accuracy**:
+   Balanced accuracy reaches its global peak across all thresholds at **0.6336** (up from 0.6013 at 0.50).
+2. **Nearly Doubled Class 1 Sensitivity**:
+   Class 1 Recall increases from **29.65% to 57.83%** (+28.18 percentage points), detecting 591 safe samples compared to only 303 at 0.50.
+3. **Significant Gain in Class 1 F1-Score**:
+   F1-score for Potable water improves from **0.4108 to 0.5602** (+14.94 percentage points).
+4. **Strong Protection of Screening Power**:
+   Class 0 Recall remains at a robust **68.90%** (1,101 of 1,598 unsafe samples caught), and Class 0 Precision is **71.87%**.
+5. **Comparison with Lower Cutoffs (e.g., 0.35)**:
+   While $\tau = 0.35$ achieves 72.80% Class 1 recall, its Class 0 recall drops to 50.75% (missing nearly half of all unsafe water samples), which poses unacceptable safety risks. Thus, **$\tau = 0.40$ represents the optimal Pareto frontier**.
+
+### F. Before-and-After Comparison
+
+#### 1. Training Out-of-Fold Cross-Validation Metrics ($N=2,620$):
+| Metric | Default ($\tau = 0.50$) | Tuned ($\tau = 0.40$) | Absolute Difference |
+|---|:---:|:---:|:---:|
+| **Balanced Accuracy** | 0.6013 | **0.6336** | **+3.23%** |
+| **Class 1 Recall (Potable)** | 0.2965 (303/1022) | **0.5783 (591/1022)** | **+28.18% (Almost Doubled)** |
+| **Class 1 Precision** | 0.6689 | 0.5432 | -12.57% (Trade-off) |
+| **Class 1 F1-Score** | 0.4108 | **0.5602** | **+14.94%** |
+| **Class 0 Recall (Unsafe)** | 0.9061 (1448/1598) | **0.6890 (1101/1598)** | -21.71% (Screening adjusted) |
+| **Class 0 Precision** | 0.6682 | **0.7187** | **+5.05%** |
+| **Overall Accuracy** | 0.6683 | 0.6458 | -2.25% |
+
+#### 2. One-Time Unseen Test Set Verification ($N=656$ Holdout):
+| Metric | Test ($\tau = 0.50$) | Test Tuned ($\tau = 0.40$) | Impact on Generalization |
+|---|:---:|:---:|:---:|
+| **Balanced Accuracy** | 0.5973 | **0.6070** | Improved generalization balance |
+| **Class 1 Recall (Potable)** | 0.2695 (69/256) | **0.5039 (129/256)** | **+23.44% (Caught 60 additional safe samples)** |
+| **Class 1 Precision** | 0.6970 | 0.5265 | Expected precision-recall trade-off |
+| **Class 1 F1-Score** | 0.3887 | **0.5150** | **+12.63% improvement** |
+| **Class 0 Recall (Unsafe)** | 0.9250 (370/400) | **0.7100 (284/400)** | Maintains solid 71% screening |
+| **Class 0 Precision** | 0.6643 | **0.6910** | **+2.67% improvement** |
+| **Overall Accuracy** | 0.6692 | 0.6296 | Retains 63% overall correctness |
+
+---
+
+## ⚠️ 11. Important Limitations & Public Health Safety Warning
+
+> [!WARNING]
+> **CRITICAL RESPONSIBLE-USE NOTICE**:
+> 1. **Auxiliary Decision-Support Tool Only**: This machine learning model and web interface are intended strictly for academic, educational, and preliminary screening research. It **DOES NOT** provide certified drinking-water safety clearance or EPA/WHO regulatory approval.
+> 2. **Professional Laboratory Testing is Mandatory**: Genuine water potability certification requires comprehensive multi-parameter chemical spectrometry and microbiological culture assays performed by certified public health laboratories.
+> 3. **Unmeasured Biological Pathogens**: This dataset records 9 inorganic/organic physicochemical measurements. Acute, deadly waterborne diseases are caused by **microbiological pathogens (such as *Escherichia coli*, *Vibrio cholerae*, *Salmonella*, *Giardia lamblia*, and enteroviruses)**, which are completely absent from this dataset. Chemically balanced water may still contain lethal bacterial or viral pathogens.
+> 4. **Statistical Model vs. Physical Reality**: Threshold tuning shifts the model's decision sensitivity to detect more safe water samples based on training correlations. It cannot compensate for unmeasured physical contaminants or replace physical water treatment processes (filtration, boiling, chlorination, UV irradiation).
+
 

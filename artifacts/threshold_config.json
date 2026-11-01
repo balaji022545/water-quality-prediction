@@ -1,0 +1,93 @@
+{
+    "selected_threshold": 0.4,
+    "selection_criteria": "Maximized Balanced Accuracy (0.6336) on 5-fold cross-validation out-of-fold training probabilities, substantially improving Class 1 recall from 29.65% to 57.83% while retaining 68.90% Class 0 screening sensitivity.",
+    "date_of_selection": "2026-11-01T08:15:07.726030+00:00",
+    "candidate_thresholds_evaluated": [
+        0.2,
+        0.25,
+        0.3,
+        0.35,
+        0.4,
+        0.45,
+        0.5,
+        0.55,
+        0.6,
+        0.65,
+        0.7
+    ],
+    "validation_metrics_at_selected_threshold": {
+        "threshold": 0.4,
+        "accuracy": 0.6458,
+        "balanced_accuracy": 0.6336,
+        "precision_class_1": 0.5432,
+        "recall_class_1": 0.5783,
+        "f1_class_1": 0.5602,
+        "precision_class_0": 0.7187,
+        "recall_class_0": 0.689,
+        "f1_class_0": 0.7035,
+        "true_negatives": 1101.0,
+        "false_positives": 497.0,
+        "false_negatives": 431.0,
+        "true_positives": 591.0
+    },
+    "validation_metrics_at_default_0_50": {
+        "threshold": 0.5,
+        "accuracy": 0.6683,
+        "balanced_accuracy": 0.6013,
+        "precision_class_1": 0.6689,
+        "recall_class_1": 0.2965,
+        "f1_class_1": 0.4108,
+        "precision_class_0": 0.6682,
+        "recall_class_0": 0.9061,
+        "f1_class_0": 0.7692,
+        "true_negatives": 1448.0,
+        "false_positives": 150.0,
+        "false_negatives": 719.0,
+        "true_positives": 303.0
+    },
+    "final_test_evaluation_audit": {
+        "test_samples": 656,
+        "default_threshold_0_50": {
+            "threshold": 0.5,
+            "accuracy": 0.6692,
+            "balanced_accuracy": 0.5973,
+            "class_0_recall": 0.925,
+            "class_0_precision": 0.6643,
+            "class_0_f1": 0.7732,
+            "class_1_recall": 0.2695,
+            "class_1_precision": 0.697,
+            "class_1_f1": 0.3887,
+            "confusion_matrix": [
+                [
+                    370,
+                    30
+                ],
+                [
+                    187,
+                    69
+                ]
+            ]
+        },
+        "tuned_threshold": {
+            "threshold": 0.4,
+            "accuracy": 0.6296,
+            "balanced_accuracy": 0.607,
+            "class_0_recall": 0.71,
+            "class_0_precision": 0.691,
+            "class_0_f1": 0.7004,
+            "class_1_recall": 0.5039,
+            "class_1_precision": 0.5265,
+            "class_1_f1": 0.515,
+            "confusion_matrix": [
+                [
+                    284,
+                    116
+                ],
+                [
+                    127,
+                    129
+                ]
+            ]
+        }
+    }
+}
