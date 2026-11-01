@@ -168,6 +168,7 @@ project_1/
 │   ├── model_evaluation.py             # (Phase 5) Evaluation report & OOF diagnostics
 │   ├── model_explainability.py         # (Phase 5) SHAP TreeExplainer & local interpretations
 │   ├── threshold_tuning.py             # Classification threshold evaluation & selection
+│   ├── class_imbalance.py              # (Phase 7) Class imbalance experiments & comparison
 │   └── utils.py                        # Helper functions for threshold loading & validation
 │
 ├── models/
@@ -175,9 +176,20 @@ project_1/
 │   ├── random_forest_tuned.joblib      # Tuned Random Forest pipeline
 │   ├── xgboost_tuned.joblib            # Tuned XGBoost pipeline
 │   ├── preprocessor.joblib             # ColumnTransformer (Imputer + Scaler)
-│   └── imputer.joblib                  # Standalone SimpleImputer
+│   ├── imputer.joblib                  # Standalone SimpleImputer
+│   └── experiments/
+│       ├── best_imbalance_model.joblib # Phase 7 experimental model (Random Undersampling)
+│       └── experiment_info.json        # Experimental model metadata
 │
 ├── artifacts/
+│   ├── class_distribution.png          # Training set class imbalance visualization
+│   ├── imbalance_comparison.csv        # 6 imbalance experiments comparison table
+│   ├── imbalance_accuracy_comparison.png # Accuracy & Balanced Accuracy chart
+│   ├── imbalance_recall_comparison.png # Class 0 vs Class 1 recall chart
+│   ├── imbalance_f1_comparison.png     # F1-score comparison chart
+│   ├── imbalance_confusion_matrices.png# 2x3 confusion matrix grid across experiments
+│   ├── best_imbalance_threshold_comparison.csv # Threshold analysis for winning candidate
+│   ├── phase_7_report.md               # Detailed technical report for Phase 7
 │   ├── threshold_comparison.csv        # Metrics across 11 candidate thresholds (0.20 - 0.70)
 │   ├── threshold_metrics.png           # Performance curve vs threshold
 │   ├── threshold_confusion_matrix.png  # Confusion matrix at optimal threshold (0.40)
@@ -339,5 +351,36 @@ Across the 11 candidate thresholds evaluated on the out-of-fold training predict
 > 2. **Professional Laboratory Testing is Mandatory**: Genuine water potability certification requires comprehensive multi-parameter chemical spectrometry and microbiological culture assays performed by certified public health laboratories.
 > 3. **Unmeasured Biological Pathogens**: This dataset records 9 inorganic/organic physicochemical measurements. Acute, deadly waterborne diseases are caused by **microbiological pathogens (such as *Escherichia coli*, *Vibrio cholerae*, *Salmonella*, *Giardia lamblia*, and enteroviruses)**, which are completely absent from this dataset. Chemically balanced water may still contain lethal bacterial or viral pathogens.
 > 4. **Statistical Model vs. Physical Reality**: Threshold tuning shifts the model's decision sensitivity to detect more safe water samples based on training correlations. It cannot compensate for unmeasured physical contaminants or replace physical water treatment processes (filtration, boiling, chlorination, UV irradiation).
+
+---
+
+## ⚖️ 12. Phase 7: Class Imbalance Handling & Optimization Summary
+
+An empirical investigation was conducted across 6 class imbalance handling techniques using strict Stratified 5-Fold Cross-Validation on the training data ($N=2,620$, zero test leakage):
+
+### A. Training Class Distribution
+- **Class 0 (Not Potable / Unsafe)**: **1,598 samples (60.99%)**
+- **Class 1 (Potable / Safe)**: **1,022 samples (39.01%)**
+- **Imbalance Ratio**: **1.564 : 1** (Moderate Imbalance)
+- **Artifact**: [artifacts/class_distribution.png](artifacts/class_distribution.png)
+
+### B. Experimental Results at Threshold 0.50 (5-Fold CV Out-of-Fold, $N=2,620$):
+
+| Experiment | Technique | Accuracy | Balanced Accuracy | Recall (C1) | Precision (C1) | F1-Score (C1) | Recall (C0) | ROC-AUC |
+|---|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **Exp A** | No Resampling (Baseline) | 0.6683 | 0.6013 | 0.2965 | **0.6689** | 0.4108 | **0.9061** | 0.6849 |
+| **Exp B** | Random Oversampling | 0.6672 | 0.6242 | 0.4286 | 0.6033 | 0.5011 | 0.8198 | 0.6862 |
+| **Exp C** | **Random Undersampling (Winner)** | 0.6401 | **0.6318** | **0.5939** | 0.5348 | **0.5628** | 0.6696 | 0.6796 |
+| **Exp D** | SMOTE Synthetic Oversampling | 0.6542 | 0.6301 | 0.5205 | 0.5612 | 0.5401 | 0.7397 | 0.6850 |
+| **Exp E** | Class Weight (`balanced`) | **0.6698** | 0.6117 | 0.3474 | 0.6420 | 0.4508 | 0.8761 | **0.6921** |
+| **Exp F** | Balanced Subsample | 0.6630 | 0.6031 | 0.3307 | 0.6294 | 0.4336 | 0.8755 | 0.6867 |
+
+### C. Key Findings & Trade-Offs
+1. **Best Imbalance Technique**: **Random Undersampling (Exp C)** achieved the highest Balanced Accuracy (**0.6318**) and doubled Class 1 Recall to **59.39%** (capturing 607 potable samples vs. 303 in baseline).
+2. **Overall Accuracy Trade-Off**: Overall accuracy decreased slightly from 66.83% to 64.01% (-2.82 percentage points) due to the inherent trade-off of reducing majority-class false reassurance.
+3. **Imbalance Handling vs. Threshold Tuning**: Both Random Undersampling at $\tau = 0.50$ (Balanced Accuracy: 0.6318, Class 1 Recall: 59.39%) and Threshold Tuning at $\tau = 0.40$ on the baseline model (Balanced Accuracy: 0.6336, Class 1 Recall: 57.83%) achieve virtually identical operating points. However, Threshold Tuning preserves all training data without discarding samples.
+4. **Model Preservation**: The production champion model (`models/best_model.joblib`) and active threshold configuration (`artifacts/threshold_config.json`, $\tau = 0.40$) remain active and protected. The winning experimental model is archived separately under [models/experiments/best_imbalance_model.joblib](models/experiments/best_imbalance_model.joblib).
+5. **Comprehensive Technical Report**: For detailed methodology and diagnostic plots, see [artifacts/phase_7_report.md](artifacts/phase_7_report.md).
+
 
 

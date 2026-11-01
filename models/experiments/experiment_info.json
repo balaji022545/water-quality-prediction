@@ -1,0 +1,5 @@
+{
+    "winning_experiment": "Exp C: Random Undersampling",
+    "model_file": "best_imbalance_model.joblib",
+    "notes": "Experimental model saved separately. Champion model models/best_model.joblib remains active and protected."
+}
