@@ -1,0 +1,71 @@
+{
+    "model_architecture": "ExtraTreesClassifier",
+    "validation_strategy": "5-Fold Outer / 3-Fold Inner Nested Stratified CV",
+    "fixed_threshold": 0.4,
+    "final_hyperparameters": {
+        "max_depth": null,
+        "max_features": "sqrt",
+        "min_samples_leaf": 1,
+        "min_samples_split": 5,
+        "n_estimators": 150
+    },
+    "fold_selections": [
+        {
+            "Fold": 1,
+            "Best_Params": {
+                "max_depth": null,
+                "max_features": "sqrt",
+                "min_samples_leaf": 1,
+                "min_samples_split": 5,
+                "n_estimators": 150
+            },
+            "Inner_CV_AUC": 0.6651894513975086
+        },
+        {
+            "Fold": 2,
+            "Best_Params": {
+                "max_depth": null,
+                "max_features": "sqrt",
+                "min_samples_leaf": 1,
+                "min_samples_split": 5,
+                "n_estimators": 150
+            },
+            "Inner_CV_AUC": 0.6724843783667313
+        },
+        {
+            "Fold": 3,
+            "Best_Params": {
+                "max_depth": null,
+                "max_features": "sqrt",
+                "min_samples_leaf": 1,
+                "min_samples_split": 5,
+                "n_estimators": 150
+            },
+            "Inner_CV_AUC": 0.685871977296998
+        },
+        {
+            "Fold": 4,
+            "Best_Params": {
+                "max_depth": 15,
+                "max_features": "sqrt",
+                "min_samples_leaf": 2,
+                "min_samples_split": 5,
+                "n_estimators": 150
+            },
+            "Inner_CV_AUC": 0.6578293380701975
+        },
+        {
+            "Fold": 5,
+            "Best_Params": {
+                "max_depth": null,
+                "max_features": "sqrt",
+                "min_samples_leaf": 1,
+                "min_samples_split": 5,
+                "n_estimators": 150
+            },
+            "Inner_CV_AUC": 0.7105499388192049
+        }
+    ],
+    "training_samples": 2620,
+    "status": "experimental_challenger"
+}

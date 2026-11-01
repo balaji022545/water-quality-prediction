@@ -426,6 +426,51 @@ An advanced model optimization study was performed to investigate whether altern
 3. **Challenger Status & Deployment Staging**: While Extra Trees is an empirically stronger challenger, the production pipeline (`models/best_model.joblib`) and active config (`artifacts/threshold_config.json`, $\tau = 0.40$) remain in production to uphold standard MLOps change management. The experimental model is archived in [models/experiments/extra_trees_tuned.joblib](models/experiments/extra_trees_tuned.joblib) ready for staging/canary validation.
 4. **Comprehensive Technical Report**: For detailed trade-off analysis, confusion matrices, and ROC/PR curves, refer to [artifacts/phase_8_report.md](artifacts/phase_8_report.md).
 
+---
+
+## 🔬 14. Phase 9: Final Model Validation and Selection Summary
+
+To eliminate potential optimistic selection bias in hyperparameter selection, a rigorous **Nested Cross-Validation** protocol was conducted to definitively compare the **Production Random Forest** against the **Challenger Extra Trees**.
+
+### A. Experimental Protocol & Strict Data Governance
+- **Data Partition**: Strictly the training set ($N=2,620$, 1,598 Class 0, 1,022 Class 1). Holdout test partitions (`X_test.csv`, `y_test.csv`) were completely isolated.
+- **Nested Architecture**:
+  - **Outer CV**: 5-Fold StratifiedKFold (`shuffle=True, random_state=42`) for unbiased generalization assessment.
+  - **Inner CV**: 3-Fold StratifiedKFold (`shuffle=True, random_state=42`) for hyperparameter optimization within outer training folds.
+- **Fixed Operating Threshold**: Fixed at $\tau = 0.40$ for all models without outer-fold threshold optimization.
+- **Leakage Prevention**: `SimpleImputer(median)` and `StandardScaler` fitted strictly within respective training folds.
+
+### B. Outer 5-Fold Nested Cross-Validation Performance (Mean ± Std, $\tau = 0.40$)
+
+| Metric | Random Forest (Production) | Extra Trees (Nested CV) | Extra Trees (Phase 8 Fixed) | Nested ET Delta vs RF |
+| :--- | :---: | :---: | :---: | :---: |
+| **ROC-AUC** | 0.6860 ± 0.0122 | **0.6983 ± 0.0145** | 0.6985 ± 0.0106 | **+0.0123 (+1.24%)** |
+| **PR-AUC** | 0.6011 ± 0.0063 | **0.6203 ± 0.0143** | 0.6136 ± 0.0063 | **+0.0192 (+1.92%)** |
+| **Balanced Accuracy** | 0.6336 ± 0.0191 | **0.6402 ± 0.0200** | 0.6460 ± 0.0172 | **+0.0066 (+0.66%)** |
+| **Class 1 Recall (Potable)** | 0.5782 ± 0.0397 | **0.5851 ± 0.0387** | 0.5948 ± 0.0519 | **+0.0069 (+0.69%)** |
+| **Class 1 Precision** | 0.5431 ± 0.0191 | **0.5514 ± 0.0249** | 0.5568 ± 0.0153 | **+0.0084 (+0.84%)** |
+| **Class 1 F1-Score** | 0.5598 ± 0.0263 | **0.5673 ± 0.0264** | 0.5744 ± 0.0269 | **+0.0075 (+0.75%)** |
+| **Class 0 Recall (Non-Potable)**| 0.6890 ± 0.0191 | **0.6953 ± 0.0271** | 0.6971 ± 0.0285 | **+0.0063 (+0.63%)** |
+| **Class 0 Precision** | 0.7190 ± 0.0179 | **0.7241 ± 0.0174** | 0.7299 ± 0.0199 | **+0.0051 (+0.51%)** |
+| **Overall Accuracy** | 0.6458 ± 0.0161 | **0.6523 ± 0.0186** | 0.6573 ± 0.0126 | **+0.0065 (+0.65%)** |
+
+### C. Pooled Out-of-Fold Metrics & Confusion Matrix Breakdown ($N=2,620$, $\tau = 0.40$)
+
+| Model Architecture | Accuracy | Balanced Accuracy | Recall (C1) | Precision (C1) | F1 (C1) | ROC-AUC | True Positives | False Positives |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Random Forest (Production)** | 0.6458 | 0.6336 | 0.5783 | 0.5432 | 0.5602 | 0.6849 | 591 | 497 |
+| **Extra Trees (Nested CV)** | **0.6523** | **0.6402** | **0.5851** | **0.5512** | **0.5676** | **0.6960** | **598 (+7)** | **487 (-10)** |
+| **Extra Trees (Phase 8 Fixed)**| **0.6573** | **0.6460** | **0.5949** | **0.5568** | **0.5752** | **0.6985** | **608 (+17)**| **484 (-13)** |
+
+### D. Final Decision & Technical Recommendations
+1. **Model Performance**: **Extra Trees** performed better across all nested cross-validation metrics.
+2. **Margin Significance**: The difference is positive and consistent across 4 out of 5 outer folds on ROC-AUC, but numerically **modest** (+1.24% ROC-AUC, +0.66% Balanced Accuracy) and within the 1-standard-deviation error bands ($\pm 0.020$).
+3. **Challenger Status**: Extra Trees is confirmed as a strong, credible **Challenger Champion** with high inner-CV hyperparameter stability (80% fold convergence).
+4. **Production Decision**: The existing **Random Forest remains active in production** (`models/best_model.joblib`). Modest incremental gains do not warrant an un-staged production replacement without live telemetry.
+5. **Pre-Deployment Requirements**: Shadow deployment logging in Streamlit, memory/latency profiling (12.3 MB vs. 6.0 MB), and SHAP explanation consistency verification are required before any future model swap.
+6. **Detailed Documentation**: See [artifacts/phase_9_report.md](artifacts/phase_9_report.md) for complete statistical breakdowns, fold-level tables, and visualizations.
+
+
 
 
 
